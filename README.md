@@ -1,3 +1,5 @@
-## ***12and.org provides access to solo piano performaces via the YouTube Channel 12and, as well as piano instruction videos via the YouTube Channel 12andProgressions. All videos, both channels, are either AD-free or shortlinked to a YouTube provided AD-free version, please see the video's description for the link.***
+## ***12and provides access to solo piano performaces via the YouTube Channel 12and, as well as piano instruction videos via the YouTube Channel 12andProgressions. All videos provided are AD-free or shortlinked to a YouTube provided AD-free version. Please see the description section of the video for the link.***
 
-The code for generating and uploading the Channels' YouTube videos are housed here and are MIT Licensed. The audio and transcriptions have been generously provided by Google LLC. Please visit 'g.co/magenta' for details.
+12and.org was created to reroute 12and viewers to a interruption free YouTube experience. The MIT Licensed code for populating the YouTube Channels are housed here and open sourced. The audio and transcriptions have been generously provided by Google LLC. Please visit 'g.co/magenta' for details.
+
+<sub>All 12and branded products are brought to you by yportne8.</sub>
