@@ -1,1 +1,3 @@
-# 12and
+# 12and.org provides access to solo piano performaces via the YouTube Channel 12and, as well as piano instruction videos via the YouTube Channel 12andProgressions. All videos, on # both channels, are either AD-free or shortlinked to a YouTube provided AD-free version, please see the video's description for the link.
+
+# The code for generating and uploading the Channels' YouTube videos are housed here and are MIT Licensed. The audio and transcriptions have been generously provided by Google LLC # and the authors of 'Enabling Factorized Piano Music Modeling and Generation with the MAESTRO Dataset': Curtis Hawthorne, Andriy Stasyuk, Adam Roberts, Ian Simon, Cheng-Zhi Anna  # Huang, Sander Dieleman, Erich Elsen, Jesse Engel, and Douglas Eck. Please visit 'g.co/magenta' for details.
