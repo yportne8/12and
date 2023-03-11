@@ -2,4 +2,4 @@
 
 12and.org was created to reroute 12and viewers to a interruption free YouTube experience. The MIT Licensed code for populating the YouTube Channels are housed here and open sourced. Audio and transcriptions have been generously provided by Google LLC. Please visit 'g.co/magenta' for details.
 
-<sub>* All '12and' branded products are brought to you by yportne8.</sub>
+<sub>* '12and' brought to you by yportne8.</sub>
