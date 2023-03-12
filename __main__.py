@@ -1,6 +1,5 @@
 import os
 import sys
-import shutil
 import inspect
 from pathlib import Path
 
@@ -8,15 +7,10 @@ from .__init__ import MaestroDataSet, Director, Composer, _12andProgressionsUplo
 
 
 def _12andProgressionsMain():
-    dest = Path(Path.home(), "Desktop", "Progression Midi")
+    composer, director, uploader = Composer(), Director(), _12andProgressionsUploader()
+    dest = Path(Path(__file__).parent,"Progression Midi")
     if not dest.exists(): dest.mkdir()
-    
-    composer = Composer()
-    director = Director(Path(dest.parent,"Progression Videos"),"12andProgressions")
-    uploader = _12andProgressionsUploader()
 
-    # Transposable progressions are divided by the emotion the progression evokes.
-    # Nontransposable progressions are place into a single playlist.
     df = composer.transposable_progressions
     playlistnames = list(set(df.PLAYLIST.to_list()))
     
@@ -25,23 +19,24 @@ def _12andProgressionsMain():
         if not playlistFolder.exists(): playlistFolder.mkdir()
         
         filteredDf = df[df.PLAYLIST == name]
-        playlistID = uploader.create_playlist(name)
+        #playlistID = uploader.create_playlist(name)
         for label in filteredDf.PROGRESSION:
-            progression = composer.get_chord_progression(label,tofile=False)
+            progression = composer.get_chord_progression(label)
             composer.transpose_progressions_tofile(progression,label,playlistFolder,True)
             composer.transpose_progressions_tofile(progression,label,playlistFolder)
             
             for f in os.listdir(playlistFolder):
-                f = Path(dest, f)
+                f = Path(playlistFolder, f)
                 if f.suffix == ".midi":
                     videoPath = director.create_video(channel="progressions",midiSource=f)
-                    uploader.upload_into_playlist(
-                        playlistID=playlistID,
-                        videoPath=videoPath,
-                        include_description=False)
+                    print(videoPath)
+                    #uploader.upload_into_playlist(
+                    #    playlistID=playlistID,
+                    #    videoPath=videoPath,
+                    #    include_description=False)
 
     df = composer.nontransposable_progressions
-    playlistID = uploader.create_playlist("Non-Transposable Progressions")
+    #playlistID = uploader.create_playlist("Non-Transposable Progressions")
     dest = Path(Path.home(),"Desktop","Progression Midi","Non-Transposable Progressions")
     if not dest.exists(): dest.mkdir()
     name = f"{progression} Progression (Non-Transposable).midi"
@@ -49,14 +44,15 @@ def _12andProgressionsMain():
         progression = composer.chord_progression(progression,Path(dest,name))
         
     for f in os.listdir(dest):
-        f = Path(dest,f)
+        f = Path(dest, name, f)
         if f.suffix == ".midi":
-            videoPath = director.create_video(f)
-            uploader.upload_into_playlist(
-                license="youtube",
-                playlistID=playlistID,
-                videoPath=videoPath,
-                include_description=False)
+            videoPath = director.create_video(channel="progressions",midiSource=f)
+            print(videoPath)
+            #uploader.upload_into_playlist(
+            #    license="youtube",
+            #    playlistID=playlistID,
+            #    videoPath=videoPath,
+            #    include_description=False)
     
 
 def _12andMain():

@@ -13,13 +13,13 @@
 import os
 import shutil
 import random
+import subprocess
 from time import sleep
 from pathlib import Path
-from subprocess import Popen,PIPE
 
 import pandas as pd
 from musicpy import (
-    chord_progression,read,write,C,scale)
+    C,chord_progression,write,scale,rest)
 from moviepy.editor import ( 
     concatenate_videoclips,VideoFileClip,
     AudioFileClip,)
@@ -86,7 +86,8 @@ class Composer:
         if dest:
             write(progression, bpm=120, name=dest)
         else:
-            return chord_progression(progression,intervals=0.5)
+            progression = chord_progression(progression,durations=1/4,intervals=0.25)
+            return progression | rest(1) | progression | rest(1) | progression 
             
     def transpose_progressions_tofile(self, progression, label: str,
                                       playlistFolder: Path, minor=False, bpm=120):
@@ -101,7 +102,7 @@ class Composer:
 
 class Director:
     
-    def __init__(self, channel: str):
+    def __init__(self):
         self.videoLength = dict()
         
     def _divide_chunks(self, folder: Path, numTracks):
@@ -121,35 +122,26 @@ class Director:
         if not midiSource.exists(): 
             print(f"{midiSource} not found.")
             return
-        
-        dest = Path(midiSource.parent, midiSource.stem + ".mp4")
-        if dest.exists(): dest.unlink()
-        
-        host, process = "powershell", "MIDIVisualizer.exe"
-        parameters = f"--midi {str(midiSource)}"
+        app = str(Path(Path(__file__).parent, "MIDIVisualizer.exe"))
+        dest = str(Path(midiSource.parent,f"{midiSource.stem}.mp4"))
+        midiSource = str(midiSource)
+        midiSource = rf"{midiSource}"
+        parameters = f'--midi "{midiSource}"'
         parameters += f" --size {size[0]} {size[1]}"
         if channel == "12and":
-            parameters += f" --config {str(Path(Path(__file__).parent,'maestroConfig.ini'))}"
+            config = str(Path(Path(__file__).parent,'maestroConfig.ini'))
+            parameters += f' --config "{config}"'
         else:
-            parameters += f" --config {str(Path(Path(__file__).parent,'progressionsConfig.ini'))}"
-        parameters += f" --export {dest}  --format MPEG4"
-        
-        process = Popen([host,process,parameters],stdout=PIPE,stderr=PIPE)
-        while process.poll:
-            stdout, stderr = process.communicate()
-            if stdout: print(stdout)
-            if stderr: print(stderr)
-        
-        sleep(3) # wait for Windows to catch up
+            config = str(Path(Path(__file__).parent,'progressionsConfig.ini'))
+            parameters += f' --config "{config}"'
+        parameters += f' --export "{dest}" --format MPEG4'
+        subprocess.check_output(
+            f"{app} {parameters}",
+            stderr=subprocess.STDOUT,
+            shell=True)
+        sleep(2)
         if dest.exists():
             print(f"{dest.name} created.")
-            return dest
-        else:
-            print(f"{dest.name} could not be found.")
-            if input("Continue?"):
-                df = pd.DataFrame.from_dict(self.videoLength,orient="columns")
-                df.to_csv("_partial_video_lenghts.csv")
-                os.exit(0)
                 
     
     def redub(self, videoFile: Path, audioFile: Path):
