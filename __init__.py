@@ -19,10 +19,11 @@ from pathlib import Path
 
 import pandas as pd
 from musicpy import (
-    C,chord_progression,write,scale,rest)
+    C,S,write,scale,rest)
 from moviepy.editor import ( 
     concatenate_videoclips,VideoFileClip,
     AudioFileClip,)
+from midi2audio import FluidSynth
 
 import googleapiclient.errors
 import google_auth_oauthlib.flow
@@ -75,29 +76,22 @@ class Composer:
         self.nontransposable_progressions = pd.read_csv(
             Path(Path(__file__).parent,"nontransposable_progressions.csv"))
         
-    def get_chord_progression(self, progression: str, dest: Path=None):
-        I,II,III,IV,V,VI,VII="C","D","E","F","G","A","B"
-        i,ii,iii,iv,v,vi,vii="Cm","Dm","Em","Fm","Gm","Am","Bm"
-        
-        progression = progression.split("-")
-        for j, c in enumerate(progression):
-            progression[j] = eval(c)
-        
-        if dest:
-            write(progression, bpm=120, name=dest)
-        else:
-            progression = chord_progression(progression,durations=1/4,intervals=0.25)
-            return progression | rest(1) | progression | rest(1) | progression 
-            
-    def transpose_progressions_tofile(self, progression, label: str,
-                                      playlistFolder: Path, minor=False, bpm=120):
-        keylabels = ["C","D","E","F","G","A","B"]
-        quality = "minor" if minor else "major"
-        for key in keylabels:
-            copyOfprogression = progression
-            copyOfprogression.modulation(scale("C","major"),scale(key,quality))
-            dest = Path(playlistFolder,f"{label} Progression in {key} major.midi")
-            write(progression, bpm=bpm, name=dest)
+    def get_chord_progression(self, progression: str, playlistFolder: Path, bpm: int=120):
+        _12keys = ["C","D","E","F","G","A","B","C#","Eb","F#","Ab","Bb"]
+        for key in _12keys:
+            for quality in ["major", "minor"]:
+                scale = S(f"{key} {quality}")
+                c1 = scale.chord_progression(progression.split("-"),1/6,1/6)
+                c2 = scale.chord_progression(progression.split("-")[::-1],1/4,1/4)
+                c3 = scale.chord_progression(progression.split("-"),1/4,1/4)@1
+                c4 = scale.chord_progression(progression.split("-"),1/4,1/4)^2
+                
+                progression = c1 | rest(0.5) | c2 | rest(0.5) | c3 | rest(0.5) | c4
+                name = Path(playlistFolder, f"{progression} Progression in {key} {quality}.mid")
+                write(progression, bpm=bpm, name=name)
+                
+                dest = Path(name.parent, f"{name.stem}.wav")
+                FluidSynth().midi_to_audio(midi_file=str(name), audio_file=str(dest))
             
 
 class Director:
@@ -139,9 +133,15 @@ class Director:
             f"{app} {parameters}",
             stderr=subprocess.STDOUT,
             shell=True)
-        sleep(2)
+        sleep(3) # wait for the file to show up.
+        dest = Path(dest)
         if dest.exists():
             print(f"{dest.name} created.")
+            audio = Path(dest.parent, f"{dest.stem}.wav")
+            self.redub(dest, audio)
+            print("Audio has been added to the video.")
+        else:
+            print(f"ERROR: {dest.name} does not exist.")
                 
     
     def redub(self, videoFile: Path, audioFile: Path):
