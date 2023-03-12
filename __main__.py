@@ -21,15 +21,11 @@ def _12andProgressionsMain():
         filteredDf = df[df.PLAYLIST == name]
         #playlistID = uploader.create_playlist(name)
         for label in filteredDf.PROGRESSION:
-            progression = composer.get_chord_progression(label)
-            composer.transpose_progressions_tofile(progression,label,playlistFolder,True)
-            composer.transpose_progressions_tofile(progression,label,playlistFolder)
-            
+            composer.get_chord_progression(label,playlistFolder)
             for f in os.listdir(playlistFolder):
                 f = Path(playlistFolder, f)
                 if f.suffix == ".midi":
                     videoPath = director.create_video(channel="progressions",midiSource=f)
-                    print(videoPath)
                     #uploader.upload_into_playlist(
                     #    playlistID=playlistID,
                     #    videoPath=videoPath,
@@ -37,22 +33,19 @@ def _12andProgressionsMain():
 
     df = composer.nontransposable_progressions
     #playlistID = uploader.create_playlist("Non-Transposable Progressions")
-    dest = Path(Path.home(),"Desktop","Progression Midi","Non-Transposable Progressions")
+    playlistFolder = Path(Path.home(),"Desktop","Progression Midi","Non-Transposable Progressions")
     if not dest.exists(): dest.mkdir()
     name = f"{progression} Progression (Non-Transposable).midi"
     for progression in df.PROGRESSION:
-        progression = composer.chord_progression(progression,Path(dest,name))
-        
-    for f in os.listdir(dest):
-        f = Path(dest, name, f)
-        if f.suffix == ".midi":
-            videoPath = director.create_video(channel="progressions",midiSource=f)
-            print(videoPath)
-            #uploader.upload_into_playlist(
-            #    license="youtube",
-            #    playlistID=playlistID,
-            #    videoPath=videoPath,
-            #    include_description=False)
+        composer.get_chord_progression(label,playlistFolder)
+        for f in os.listdir(playlistFolder):
+            f = Path(playlistFolder, f)
+            if f.suffix == ".midi":
+                videoPath = director.create_video(channel="progressions",midiSource=f)
+                #uploader.upload_into_playlist(
+                #    playlistID=playlistID,
+                #    videoPath=videoPath,
+                #    include_description=False)
     
 
 def _12andMain():
