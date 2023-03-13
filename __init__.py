@@ -18,12 +18,10 @@ from time import sleep
 from pathlib import Path
 
 import pandas as pd
-from musicpy import (
-    C,S,write,scale,rest)
-from moviepy.editor import ( 
-    concatenate_videoclips,VideoFileClip,
-    AudioFileClip,)
+from musicpy import S,write,rest
 from midi2audio import FluidSynth
+from moviepy.editor import (concatenate_videoclips,
+                            VideoFileClip,AudioFileClip,)
 
 import googleapiclient.errors
 import google_auth_oauthlib.flow
@@ -66,34 +64,8 @@ class MaestroDataSet:
             except:
                 print(f"{filestem} does not exist.")
         return (self.midiDir, self.wavDir)
-
-
-class Composer:
-        
-    def __init__(self):
-        self.transposable_progressions = pd.read_csv(
-            Path(Path(__file__).parent,"transposable_progressions.csv"))
-        self.nontransposable_progressions = pd.read_csv(
-            Path(Path(__file__).parent,"nontransposable_progressions.csv"))
-        
-    def get_chord_progression(self, progression: str, playlistFolder: Path, bpm: int=120):
-        _12keys = ["C","D","E","F","G","A","B","C#","Eb","F#","Ab","Bb"]
-        for key in _12keys:
-            for quality in ["major", "minor"]:
-                scale = S(f"{key} {quality}")
-                c1 = scale.chord_progression(progression.split("-"),1/6,1/6)
-                c2 = scale.chord_progression(progression.split("-")[::-1],1/4,1/4)
-                c3 = scale.chord_progression(progression.split("-"),1/4,1/4)@1
-                c4 = scale.chord_progression(progression.split("-"),1/4,1/4)^2
-                
-                progression = c1 | rest(0.5) | c2 | rest(0.5) | c3 | rest(0.5) | c4
-                name = Path(playlistFolder, f"{progression} Progression in {key} {quality}.mid")
-                write(progression, bpm=bpm, name=name)
-                
-                dest = Path(name.parent, f"{name.stem}.wav")
-                FluidSynth().midi_to_audio(midi_file=str(name), audio_file=str(dest))
-            
-
+    
+    
 class Director:
     
     def __init__(self):
@@ -116,39 +88,47 @@ class Director:
         if not midiSource.exists(): 
             print(f"{midiSource} not found.")
             return
+        
         app = str(Path(Path(__file__).parent, "MIDIVisualizer.exe"))
-        dest = str(Path(midiSource.parent,f"{midiSource.stem}.mp4"))
-        midiSource = str(midiSource)
-        midiSource = rf"{midiSource}"
-        parameters = f'--midi "{midiSource}"'
+        parameters = f'--midi "{str(midiSource)}"'
         parameters += f" --size {size[0]} {size[1]}"
+        
         if channel == "12and":
             config = str(Path(Path(__file__).parent,'maestroConfig.ini'))
             parameters += f' --config "{config}"'
         else:
             config = str(Path(Path(__file__).parent,'progressionsConfig.ini'))
             parameters += f' --config "{config}"'
-        parameters += f' --export "{dest}" --format MPEG4'
+
+        dest = Path(midiSource.parent,f"{midiSource.stem}.mp4")
+        parameters += f' --export "{str(dest)}" --format MPEG4'
         subprocess.check_output(
             f"{app} {parameters}",
             stderr=subprocess.STDOUT,
             shell=True)
+        
         sleep(3) # wait for the file to show up.
-        dest = Path(dest)
         if dest.exists():
             print(f"{dest.name} created.")
-            audio = Path(dest.parent, f"{dest.stem}.wav")
-            self.redub(dest, audio)
-            print("Audio has been added to the video.")
+            
+            if channel == "12and":
+                audio = Path(dest.parent, f"{dest.stem}.wav")
+                self.redub(dest, audio)
+                print("Audio has been added to the video.")
+                return dest
+            else:
+                return dest
         else:
             print(f"ERROR: {dest.name} does not exist.")
                 
     
     def redub(self, videoFile: Path, audioFile: Path):
-        audio = AudioFileClip(audioFile)
-        video = VideoFileClip(videoFile)
-        dub = video.set_audio(audio)
-        dub.write_videofile(videoFile)
+        audio = AudioFileClip(str(audioFile))
+        video = VideoFileClip(str(videoFile))
+        dubbed = video.set_audio(audio)
+        video2upload = Path(videoFile.parent, f"{videoFile.stem} (@12andProgressions).mp4")
+        dubbed.write_videofile(str(video2upload))
+        return video2upload
         
     def concatenate(self, folder: Path, length: int):
         if not folder.is_dir():
@@ -190,7 +170,44 @@ class Director:
                 print(f"{dest.name} has been created.")
             else:
                 if input(f"{dest.name} could not be found. Continue?"): os._exit()
-            
+
+
+class Composer(Director):
+        
+    def __init__(self):
+        super().__init__()
+        
+        self.transposable_progressions = pd.read_csv(
+            Path(Path(__file__).parent,
+                 "transposable_progressions.csv"))
+        
+        self.nontransposable_progressions = pd.read_csv(
+            Path(Path(__file__).parent,
+                 "nontransposable_progressions.csv"))
+        
+    def get_chord_progression(self, progression: str, playlistFolder: Path, bpm: int=120):
+        _12keys = ["C#","Eb","F#","Ab","Bb",
+                   "C","D","E","F","G","A","B"]
+        
+        for tone in _12keys:
+            for quality in ["major", "minor"]:
+                keysig = f"{tone} {quality}"
+                c1 = S(keysig).chord_progression(progression.split("-"),1/6,1/6) * 2
+                c2 = S(keysig).chord_progression(progression.split("-"),1/4,1/4) * 2
+                        
+                # midi
+                chord_progression = c1 | rest(0.5) | c1[::-1] | rest(0.5) | c2 | rest(0.5) | c2[::-1]
+                midi = Path(playlistFolder, f"{progression} Progression in {tone} {quality}.mid")
+                write(chord_progression, bpm=bpm, name=midi)
+
+                # wav                
+                audio = Path(midi.parent, f"{midi.stem}.wav")
+                FluidSynth().midi_to_audio(midi_file=str(midi), audio_file=str(audio))
+
+                video = self.create_video(channel="12andProgressions",midiSource=midi)
+                videoFile = self.redub(video, audio)
+                print(f"{str(videoFile.name)} has been saved.")
+
 
 class _12andUploader:
     
