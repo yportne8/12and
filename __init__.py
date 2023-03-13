@@ -29,43 +29,9 @@ import googleapiclient.discovery
 from googleapiclient.http import MediaFileUpload
 
 
-class MaestroDataSet:
-    
-    def __init__(self):
-        self.sourceDir = Path(Path(__file__).parent, "maestro")
-        if not self.sourceDir.exists(): os._exit(0)
-        
-        self.midiDir = Path(Path.home(), "Desktop", "Midi")
-        if not self.midiDir.exists(): self.midiDir.mkdir()
-        
-        self.wavDir = Path(self.midiDir.parent, "Wav")
-        if not self.wavDir.exists(): self.wavDir.mkdir()
-        
-        self.tags = pd.read_csv("composer_title_track.csv")
-        videoTitles = f"{self.tags.title} ({self.tags.COMPOSER})"
-        self.tags["VIDEOTITLE"] = videoTitles
-        
-        # For future reference👍
-        self.tags[["PATH", "VIDEOTITLE"]].to_csv("deduped_tracktitle_videotitle.csv")
-        
-    def move_rename(self):
+CWD = Path(__file__).parent
 
-        for path, vtitle in zip(self.tags.PATH, self.tags.VIDEOTITLE):
-            filestem = path.stem
-            
-            try:
-                midifile = str(Path(self.sourceDir, f"{filestem}.midi"))
-                destMidifile = str(Path(self.midiDir, f"{vtitle}.midi"))
-                shutil.move(midifile, destMidifile)
-            
-                wavfile = str(Path(self.sourceDir, f"{filestem}.wav"))
-                destWavfile = str(Path(self.wavDir, f"{vtitle}.wav"))            
-                shutil.move(wavfile, destWavfile)
-            except:
-                print(f"{filestem} does not exist.")
-        return (self.midiDir, self.wavDir)
-    
-    
+
 class Director:
     
     def __init__(self):
@@ -89,15 +55,15 @@ class Director:
             print(f"{midiSource} not found.")
             return
         
-        app = str(Path(Path(__file__).parent, "MIDIVisualizer.exe"))
+        app = str(Path(CWD, "MIDIVisualizer.exe"))
         parameters = f'--midi "{str(midiSource)}"'
         parameters += f" --size {size[0]} {size[1]}"
         
         if channel == "12and":
-            config = str(Path(Path(__file__).parent,'maestroConfig.ini'))
+            config = str(Path(CWD,'maestroConfig.ini'))
             parameters += f' --config "{config}"'
         else:
-            config = str(Path(Path(__file__).parent,'progressionsConfig.ini'))
+            config = str(Path(CWD,'progressionsConfig.ini'))
             parameters += f' --config "{config}"'
 
         dest = Path(midiSource.parent,f"{midiSource.stem}.mp4")
@@ -110,14 +76,7 @@ class Director:
         sleep(3) # wait for the file to show up.
         if dest.exists():
             print(f"{dest.name} created.")
-            
-            if channel == "12and":
-                audio = Path(dest.parent, f"{dest.stem}.wav")
-                self.redub(dest, audio)
-                print("Audio has been added to the video.")
-                return dest
-            else:
-                return dest
+            return dest
         else:
             print(f"ERROR: {dest.name} does not exist.")
                 
@@ -154,7 +113,7 @@ class Director:
         
     def recut(self, mp4: Path):
         try:
-            tracklisting = pd.read_csv(Path(Path(__file__).parent, f"{mp4.stem}_videotitle_duration.csv"))
+            tracklisting = pd.read_csv(Path(CWD, f"{mp4.stem}_videotitle_duration.csv"))
         except:
             print("Failed to find track listing")
             
@@ -172,17 +131,47 @@ class Director:
                 if input(f"{dest.name} could not be found. Continue?"): os._exit()
 
 
+class Transcriber(Director):
+    
+    def __init__(self):
+        super().__init__()
+        self.pianoDir = Path(Path.home(), "Downloads", "Piano")
+        if not self.pianoDir.exists(): self.pianoDir.mkdir()
+
+        self.sourceDir =  Path(CWD,"transcriptions")
+        self.tags = pd.read_csv(Path(CWD,"composer_title_track.csv"))
+        self.composers = list(set(self.tags.COMPOSER.to_list()))
+        self.videoTitles = f"{self.tags.TITLE} ({self.tags.COMPOSER})"
+        self.transcriptions = [Path(self.sourceDir, f) for f in self.tags.PATH.to_list()]
+        
+    def get_vizualizations(self):
+        for composer in self.composers:
+            folder = Path(CWD, composer)
+            if not folder.exists: folder.mkdir()
+            for transcription, title in zip(self.transcriptions,self.videoTitles):
+                audio = Path(transcription.parent, f"{transcription.stem}.wav")
+                FluidSynth().midi_to_audio(midi_file=str(transcription), audio_file=str(audio))
+                
+                video = self.create_video(channel="12andProgressions",midiSource=transcription)
+                videoFile = self.redub(video, audio)
+                
+                print(f"{str(videoFile.name)} has been saved.")
+                videoPath = self.create_video("12and",transcription)
+                dest = Path(self.pianoDir, f"{title}.mp4")
+                shutil.move(str(videoPath), str(dest))
+
+
 class Composer(Director):
         
     def __init__(self):
         super().__init__()
         
         self.transposable_progressions = pd.read_csv(
-            Path(Path(__file__).parent,
+            Path(CWD,
                  "transposable_progressions.csv"))
         
         self.nontransposable_progressions = pd.read_csv(
-            Path(Path(__file__).parent,
+            Path(CWD,
                  "nontransposable_progressions.csv"))
         
     def get_chord_progression(self, progression: str, playlistFolder: Path, bpm: int=120):
@@ -212,7 +201,7 @@ class Composer(Director):
 class _12andUploader:
     
     def __init__(self):
-        self.client_secrets_file = str(Path(Path(__file__).parent,"12and_client_secret.json"))
+        self.client_secrets_file = str(Path(CWD,"12and_client_secret.json"))
         self.license = "creativeCommons"
         
     def _short_link(self, videoTitle: str):
@@ -290,7 +279,7 @@ class _12andProgressionsUploader(_12andUploader):
     
     def __init__(self):
         super().__init__()
-        self.client_secrets_file = str(Path(Path(__file__).parent,"client_secret.json")) 
+        self.client_secrets_file = str(Path(CWD,"client_secret.json")) 
         self.license = "youtube"
         
     def get_youtube(self):
