@@ -135,14 +135,11 @@ class Transcriber(Director):
     
     def __init__(self):
         super().__init__()
-        self.pianoDir = Path(Path.home(), "Downloads", "Piano")
-        if not self.pianoDir.exists(): self.pianoDir.mkdir()
-
         self.sourceDir =  Path(CWD,"transcriptions")
         self.tags = pd.read_csv(Path(CWD,"composer_title_track.csv"))
         self.composers = list(set(self.tags.COMPOSER.to_list()))
         self.videoTitles = f"{self.tags.TITLE} ({self.tags.COMPOSER})"
-        self.transcriptions = [Path(self.sourceDir, f) for f in self.tags.PATH.to_list()]
+        self.transcriptions = [Path(self.sourceDir, f.split("/")[1]) for f in self.tags.PATH.to_list()]
         
     def get_vizualizations(self):
         for composer in self.composers:
@@ -157,8 +154,10 @@ class Transcriber(Director):
                 
                 print(f"{str(videoFile.name)} has been saved.")
                 videoPath = self.create_video("12and",transcription)
-                dest = Path(self.pianoDir, f"{title}.mp4")
+                dest = Path(folder, f"{title}.mp4")
                 shutil.move(str(videoPath), str(dest))
+                os.remove(videoFile)
+                os.remove(audio)
 
 
 class Composer(Director):

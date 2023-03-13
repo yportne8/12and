@@ -3,7 +3,7 @@ import sys
 import inspect
 from pathlib import Path
 
-from .__init__ import MaestroDataSet, Director, Composer, _12andProgressionsUploader, _12andUploader
+from .__init__ import Transcriber, Director, Composer, _12andProgressionsUploader, _12andUploader
 
 
 def _12andProgressionsMain():
@@ -49,15 +49,9 @@ def _12andProgressionsMain():
     
 
 def _12andMain():
-    maestro  = MaestroDataSet()
-    director = Director()
-    uploader = _12andUploader("creativeCommons")
-
+    transcriber  = Transcriber()
     try:
-        transcriptionsDir, audioDir = maestro.move_rename()
-        # All individual tracks are placed into playlists by Composer.
-        # Shuffled volumes are placed into playlists by approx span of time.
-        
+        transcriber.get_vizualizations()
     except Exception as e:
         inspect.trace(e)
 
