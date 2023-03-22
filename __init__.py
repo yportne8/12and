@@ -1,309 +1,284 @@
-# -*- coding: utf-8 -*-
-# Code used to create YouTube Channels 12and and 12andProgressions.
+# -*- coding: utf-8 -*-background
 
-# [About 12&] 12and is a non-monetized YouTube Channel. This includes the
-# 24/7 Live stream of the contents of this channel to drive viewership.
+import sys
+import random
 
-# [About 12& Progressions] 12andProgressions is a monetized channel. All videos 
-# are under one minute (where possible) viewable on repeat without interruptions. The channel will be introducing advanced chords
-# and chord progressions, as well as midi-renditions of string instruments as we
-# move forward.
-
+from pathlib import Path
+if getattr(sys, 'frozen', False):
+    CWD = sys._MEIPASS
+else:
+    CWD = Path(__file__).parent
+sys.path.append(str(Path(CWD,"bin")))
 
 import os
 import shutil
 import random
+import atexit
+import threading
 import subprocess
 from time import sleep
-from pathlib import Path
+from typing import Union
+from string import ascii_letters
 
-import pandas as pd
-from musicpy import S,write,rest
-from midi2audio import FluidSynth
-from moviepy.editor import (concatenate_videoclips,
-                            VideoFileClip,AudioFileClip,)
-
-import googleapiclient.errors
-import google_auth_oauthlib.flow
-import googleapiclient.discovery
-from googleapiclient.http import MediaFileUpload
+from ffmpeg import FFmpeg
+from moviepy.editor import (vfx,
+    concatenate_videoclips,VideoFileClip,
+    AudioFileClip,TextClip,CompositeVideoClip)
+from moviepy.video.fx.all import crop, mask_color
+from PySimpleGUI import popup_get_folder, popup_yes_no, popup_get_text
 
 
-CWD = Path(__file__).parent
 
-
-class Director:
+def _FIX_WINDOWS_PATH(source:Union[Path,str]):
+    if type(source) == str: Path(source.replace("//","/"))
+    new_stem = "".join([c for c in source.stem if c.isalnum() or c in [" ","-","_"]])
+    dest = Path(source.parent,f"{new_stem}{source.suffix}")
     
-    def __init__(self):
-        self.videoLength = dict()
-        
-    def _divide_chunks(self, folder: Path, numTracks):
-        files = [Path(folder, f) for f in os.listdir(folder)]
-        random.shuffle(files)
-        for i in range(0, len(files), numTracks):
-            yield files[i:i+numTracks]
-        
-    def _duration(self, mp4: Path):
-        clip = VideoFileClip(mp4)
-        duration = clip.duration
-        print(f"Video duration is {duration}. Type {type(duration)}")
-        return duration
+    if source != dest: shutil.move(str(source),str(dest))
+    return dest
+
+
+def GET_FILES(suffix):
+    msg          = "Please select a folder."
+    default_path = str(Path(Path.home(),"Desktop"))
+    directory    = popup_get_folder(msg,default_path=default_path)
+    paths        = [Path(directory,f) for f in os.listdir(directory)]
     
-    def create_video(self, channel: str, midiSource: Path):
-        size = (1600,900) if channel == "12and" else (1080,1080)
-        if not midiSource.exists(): 
-            print(f"{midiSource} not found.")
-            return
-        
-        app = str(Path(CWD, "MIDIVisualizer.exe"))
-        parameters = f'--midi "{str(midiSource)}"'
-        parameters += f" --size {size[0]} {size[1]}"
-        
-        if channel == "12and":
-            config = str(Path(CWD,'maestroConfig.ini'))
-            parameters += f' --config "{config}"'
-        else:
-            config = str(Path(CWD,'progressionsConfig.ini'))
-            parameters += f' --config "{config}"'
-
-        dest = Path(midiSource.parent,f"{midiSource.stem}.mp4")
-        parameters += f' --export "{str(dest)}" --format MPEG4'
-        subprocess.check_output(
-            f"{app} {parameters}",
-            stderr=subprocess.STDOUT,
-            shell=True)
-        
-        sleep(3) # wait for the file to show up.
-        if dest.exists():
-            print(f"{dest.name} created.")
-            return dest
-        else:
-            print(f"ERROR: {dest.name} does not exist.")
-                
-    
-    def redub(self, videoFile: Path, audioFile: Path):
-        audio = AudioFileClip(str(audioFile))
-        video = VideoFileClip(str(videoFile))
-        dubbed = video.set_audio(audio)
-        video2upload = Path(videoFile.parent, f"{videoFile.stem} (@12andProgressions).mp4")
-        dubbed.write_videofile(str(video2upload))
-        return video2upload
-        
-    def concatenate(self, folder: Path, length: int):
-        if not folder.is_dir():
-            print("A directory of mp4 files is required.")
-            
-        numTracks = {
-            1: 6,
-            4: 24,
-            10: 60}[length]
-        
-        volumes = list(self._divide_chunks(folder, numTracks))
-        dest = Path(folder, "Completed")
-        if not dest.exists(): dest.mkdir()
-        
-        for i, volume in enumerate(volumes):
-            tracks = list()
-            for track in volume:
-                self.videoLength[track.stem] = self._duration(track)
-            video = concatenate_videoclips(tracks)
-            video.write_videofile(Path(dest, f"Vol_{i}.webm"))
-            
-        self.videoLength.to_csv(f"Vol_{i}_videotitle_duration.csv")
-        
-    def recut(self, mp4: Path):
-        try:
-            tracklisting = pd.read_csv(Path(CWD, f"{mp4.stem}_videotitle_duration.csv"))
-        except:
-            print("Failed to find track listing")
-            
-        start, video = 0, VideoFileClip(mp4)
-        print(f"Generating {len(tracklisting)} videos from {mp4.name}...")
-        for title, duration in zip(tracklisting.VIDEOTITLE, tracklisting.DURATION):
-            clip = video.clip(start, start + duration)
-            start = start + duration
-            
-            dest = Path(self.dest, f"{title}.mp4")
-            clip.write_videofile(dest)
-            if dest.exists():
-                print(f"{dest.name} has been created.")
-            else:
-                if input(f"{dest.name} could not be found. Continue?"): os._exit()
+    if type(suffix) == str: suffix = [suffix]
+    return [_FIX_WINDOWS_PATH(p) for p in paths if p.suffix in suffix]
 
 
-class Transcriber(Director):
-    
-    def __init__(self):
-        super().__init__()
-        self.sourceDir =  Path(CWD,"transcriptions")
-        self.tags = pd.read_csv(Path(CWD,"composer_title_track.csv"))
-        self.composers = list(set(self.tags.COMPOSER.to_list()))
-        self.videoTitles = f"{self.tags.TITLE} ({self.tags.COMPOSER})"
-        self.transcriptions = [Path(self.sourceDir, f.split("/")[1]) for f in self.tags.PATH.to_list()]
-        
-    def get_vizualizations(self):
-        for composer in self.composers:
-            folder = Path(CWD, composer)
-            if not folder.exists: folder.mkdir()
-            for transcription, title in zip(self.transcriptions,self.videoTitles):
-                audio = Path(transcription.parent, f"{transcription.stem}.wav")
-                FluidSynth().midi_to_audio(midi_file=str(transcription), audio_file=str(audio))
-                
-                video = self.create_video(channel="12andProgressions",midiSource=transcription)
-                videoFile = self.redub(video, audio)
-                
-                print(f"{str(videoFile.name)} has been saved.")
-                videoPath = self.create_video("12and",transcription)
-                dest = Path(folder, f"{title}.mp4")
-                shutil.move(str(videoPath), str(dest))
-                os.remove(videoFile)
-                os.remove(audio)
+class Composer:
 
-
-class Composer(Director):
+    def progression_midi(self, progression: str, bpm: int=120, all_keys: bool=False):
+        _12keys = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"]
         
-    def __init__(self):
-        super().__init__()
-        
-        self.transposable_progressions = pd.read_csv(
-            Path(CWD,
-                 "transposable_progressions.csv"))
-        
-        self.nontransposable_progressions = pd.read_csv(
-            Path(CWD,
-                 "nontransposable_progressions.csv"))
-        
-    def get_chord_progression(self, progression: str, playlistFolder: Path, bpm: int=120):
-        _12keys = ["C#","Eb","F#","Ab","Bb",
-                   "C","D","E","F","G","A","B"]
-        
+        progressions = list()
+        repeat = 2 if all_keys else 1
         for tone in _12keys:
             for quality in ["major", "minor"]:
                 keysig = f"{tone} {quality}"
-                c1 = S(keysig).chord_progression(progression.split("-"),1/6,1/6) * 2
-                c2 = S(keysig).chord_progression(progression.split("-"),1/4,1/4) * 2
-                        
-                # midi
-                chord_progression = c1 | rest(0.5) | c1[::-1] | rest(0.5) | c2 | rest(0.5) | c2[::-1]
-                midi = Path(playlistFolder, f"{progression} Progression in {tone} {quality}.mid")
-                write(chord_progression, bpm=bpm, name=midi)
-
-                # wav                
-                audio = Path(midi.parent, f"{midi.stem}.wav")
-                FluidSynth().midi_to_audio(midi_file=str(midi), audio_file=str(audio))
-
-                video = self.create_video(channel="12andProgressions",midiSource=midi)
-                videoFile = self.redub(video, audio)
-                print(f"{str(videoFile.name)} has been saved.")
+                c1 = S(keysig).chord_progression(progression.split("-"),1/6,1/6)
+                c2 = S(keysig).chord_progression(progression.split("-"),1/4,1/4)
+                                   
+                chord_progression = c1*2 | rest(0.5) | c1[::-1]*2 | rest(0.5) | c2*2 | rest(0.5) | c2[::-1]*2
+                keysigMidi = Path(playlistFolder, f"{progression} Progression in {tone} {quality}.midi")
+                write(chord_progression, bpm=bpm, name=keysigMidi)
+                progressions.append(c1 | rest(0.5))
+        fullMidi = Path(playlistFolder, f"{progression} Progression in All Key Signatures).midi")
+        write(progressions, fullMidi)
 
 
-class _12andUploader:
+class AudioDubber:
+
+    def __init__(self, audioPath: Path, videoPath: Path):
+        self.dest      = str(Path(videoPath.parent,f"{videoPath.stem}_dubbed.mp4"))
+        self.audioPath = str(audioPath)
+        self.videoPath = str(videoPath) 
+
+    def dub(self):
+        video  = VideoFileClip(self.videoPath)
+        audio  = AudioFileClip(self.audioPath)
+        dubbed = video.set_audio(audio)
+        dubbed.write_videofile(self.dest)
+
+
+class MIDIVisualizer(threading.Thread):
+
+    APP = Path(CWD,"bin","MIDIVisualizer.exe")
+    CONFIG = Path(CWD,"assets","config.ini")
+    BACKGROUNDS = [Path(CWD,"assets",bg) for bg in os.listdir(Path(CWD,"assets")) \
+                   if Path(CWD,"assets",bg).suffix == ".jpg"]
+
+    def __init__(self, midiPath: Path, notes: bool, color: str,
+                 # color: blue, green, grey, purple, red
+                 peddle      : bool = True,
+                 app         : Path = APP,
+                 config      : Path = CONFIG,
+                 backgrounds : dict = BACKGROUNDS):
+        self.stdout = None
+        self.stderr = None
+        threading.Thread.__init__(self)
+        
+        destName = f"{midiPath.stem}.mp4" if notes \
+                    else f"{midiPath.stem}_Pianoroll.mp4" 
+        
+        self.app        = str(app)
+        self.dest       = str(Path(midiPath.parent,destName))
+        self.midiPath   = str(_FIX_WINDOWS_PATH(midiPath)) 
+        
+        background = [bg for bg in backgrounds if bg.stem == color][0] 
+        self.background = str(background)
+        
+        showScore  = 1 if notes else 0
+        showNotes  = 1 if notes else 0
+        if peddle:
+            showPeddle = 1
+            self.height = "1080"
+            self.width = "1920"
+        else:
+            showPeddle = 0
+            self.height = "1080"
+            self.width = "1080"
+            self.background = [bg for bg in backgrounds if bg.stem == "square"][0]
+
+        with open(config, "r") as f:
+            contents = f.read()
+            contents = contents % (showScore,showNotes,showPeddle,self.background)
+            config = Path(config.parent, f"_{config.stem}.ini")
+            with open(config, "w+") as f:
+                f.write(contents)
+
+        self.config = str(config)
+
+    def run(self):
+        params  = f' --export "{self.dest}" --format MPEG4 --config "{self.config}"'
+        params += f' --midi "{self.midiPath}" --size {self.width} {self.height}'
+        p = subprocess.Popen(
+            self.app+params,shell=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE)
+        self.stdout, self.stderr = p.communicate()
+
+
+class FluidSynth(threading.Thread):
+
+    GAIN = "0.2"
+    SAMPLE_RATE = "44100"
+    FSYNTH = Path(CWD,"bin","fluidsynth.exe")
+    SOUNDFONTS = [Path(CWD,"soundfonts",sf) for sf in os.listdir(Path(CWD,"soundfonts"))]
+
+    def __init__(self, soundfont: str, midiPath: Path,
+                 gain        : str  = GAIN,
+                 app         : Path = FSYNTH,
+                 soundfonts  : dict = SOUNDFONTS,
+                 sample_rate : str  = SAMPLE_RATE):
+        self.stdout = None
+        self.stderr = None
+        threading.Thread.__init__(self)
+        
+        self.app         = str(app)
+        self.gain        = gain
+        self.sample_rate = sample_rate
+        
+        soundfont = [sf for sf in soundfonts if sf.stem == soundfont][0] 
+        self.soundfont   = str(soundfont)
+        
+        self.dest        = str(Path(midiPath.parent,f"{midiPath.stem}.wav"))
+        self.midiPath    = str(midiPath)
+
+    def run(self):
+        params  = f' -ni -g {self.gain} "{self.soundfont}"'
+        params += f' "{self.midiPath}" -F "{self.dest}"'
+        params += f' -r {self.sample_rate}'
+        p = subprocess.Popen(self.app+params,
+                             shell=False,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        self.stdout, self.stderr = p.communicate()
+
+
+class AVP(threading.Thread):
+
+    BACKGROUNDS = [Path(CWD,"assets",bg) for bg in os.listdir(Path(CWD,"assets")) \
+                   if Path(CWD,"assets",bg).suffix == ".png"]
+
+    def __init__(self, audioPath: Path, color: str,
+                 backgrounds=BACKGROUNDS):
+        self.stdout = None
+        self.stderr = None
+        threading.Thread.__init__(self)
+
+        self.app        = "avp"
+        self.dest       = str(Path(audioPath.parent,f"{audioPath.stem}_Visualizer.mp4"))
+        self.audioPath  = str(audioPath)
+        
+        background = [bg for bg in backgrounds if bg.stem == color][0] 
+        self.background = str(background)
+        
     
-    def __init__(self):
-        self.client_secrets_file = str(Path(CWD,"12and_client_secret.json"))
-        self.license = "creativeCommons"
+    def run(self):
+        params  = f' -c 0 image path="{self.background}"'
+        params += ' -c 1 classic color=255,255,255'
+        params += f' -i "{self.audioPath}" -o "{self.dest}"'
+        p = subprocess.Popen(self.app+params,
+                             shell=False,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        self.stdout, self.stderr = p.communicate()
         
-    def _short_link(self, videoTitle: str):
-        for i, c in enumerate(videoTitle): videoTitle[i] = c if c.isalnum() else "_"
-        return f"https://12and.org/youtube/{videoTitle}"
+
+class VideoEditor(threading.Thread):
+
+
+    def __init__(self, pianorollPath: Path, visualizerPath: Path):
+        self.stdout = None
+        self.stderr = None
+        threading.Thread.__init__(self)
+        
+        destName        = pianorollPath.stem.split("_Pianoroll")[0]
+        self.dest       = Path(pianorollPath.parent,f"{destName}.mp4")
+        self.visualizer = str(visualizerPath)
+        self.pianoroll  = str(pianorollPath)
+        
+    def run(self):
+        visualizerClip = VideoFileClip(self.visualizer).resize((1920,1080))
+        pianorollClip  = VideoFileClip(self.pianoroll).resize((1920,1080))
+        pianorollClip  = crop(pianorollClip, y1=1080//2)
+        
+        combinedVideo = CompositeVideoClip([
+            visualizerClip.volumex(1.0),
+            pianorollClip.set_position((0,0))],
+            size = (1920,1080))
+
+        combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4',threads=6)
+
+
+class ChapterGenerator(threading.Thread):
+
+
+    def __init__(self, videoDir: Path):
+        self.stdout = None
+        self.stderr = None
+        threading.Thread.__init__(self)
+
+        self.videoPaths = [
+            Path(videoDir,f) for f in os.listdir(videoDir) \
+                if Path(videoDir,f).suffix == ".mp4"]
+        random.shuffle(self.videoPaths)
+
+    def __create_chapter_listing(self):
+        chapterListing = ""
+        totalDuration = 0
+        
+        for video in self.videoPaths:
+            title = video.stem
+            clip = VideoFileClip(str(video))
+            duration = clip.duration
+            
+            timestamp = "{:02d}:{:02d}:{:02d}".format(int(total_duration // 3600),
+                            int(total_duration % 3600 // 60),
+                            int(total_duration % 60))
+            ts_components = timestamp.split(":")
+            if int(ts_components[0]) == 0:
+                ts_components = ts_components[1:]
+                if int(ts_components[0]) < 10:
+                    ts_components[0] = str(int(ts_components))
+            timestamp = ":".join(ts_components)
+            chapterListing += "{} - {}\n".format(timestamp, title)
+            totalDuration += duration
+        
+        dest = Path(self.videoPaths[0].parent, "chapterListing.txt")
+        with open(dest, "w+") as cl:
+            cl.write(chapterListing)
     
-    def _description(self, videoTitle: str):
-        description = f"YouTube's AD-free version => {self._short_link(videoTitle)}\n"
-        description += "For instructional shorts check out @12andprogressions 👍\n\n\n"
-        description += "* Audio and transcription courtesy of Google LLC."
+    def run(self):
+        clips = [VideoFileClip(str(v)) for v in self.videoPaths]
+        concatVideo = concatenate_videoclips(clips)
         
-    def _upload(self, license: str, videoPath: Path, include_description: bool=False):
-        description = self._description(videoPath.stem() if include_description else "")
-        request = self.youtube().videos().insert(
-            part="snippet,status",
-            body={
-                "snippet": {
-                    "categoryId": "10",
-                    "description": description,
-                "title": videoPath.stem},
-            "status": {
-                "privacyStatus": "public",
-                "notifySubscribers": "False",
-                "license": license}},
-            media_body=MediaFileUpload(str(videoPath)))
-        response = request.execute()
-        print(response)
-        return response["id"]
+        finalVideoName = list("ByPassAudioWriteBug")
+        random.shuffle(finalVideoName)
+        finalVideoName = f'{"".join(finalVideoName)}.mp4'        
         
-    def get_youtube(self):
-        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-        scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
-        api_service_name, api_version = "youtube", "v3"
-        
-        return googleapiclient.discovery.build(
-            api_service_name, api_version,
-            credentials=google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-                self.client_secrets_file, scopes).run_console())
-
-    def create_playlist(self, title: str):
-        description = "Solo Piano Performances set to Piano Visualization.\n"
-        description += "For instructional shorts check out @12andprogressions"
-        request = self.get_youtube().playlists().insert(
-            part="snippet,status",
-            body={
-            "snippet": {
-                "title": title,
-                "description": description,
-                "tags": [""],
-                "defaultLanguage": "en"},
-            "status": {"privacyStatus": "public"}})
-        response = request.execute()
-        print(response)
-        return response["id"]
-        
-    def insert_into_playlist(self, playlistID: str, videoID: str):
-        request = self.youtube().playlistItems().insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "playlistId": playlistID,
-                    "position": 0,
-                    "resourceId": {
-                        "kind": "youtube#video",
-                        "videoId": videoID}}})
-        response = request.execute()
-        print(response)
-        
-    def upload_into_playlist(self, playlistID: str, videoPath: Path, include_description: False):
-        videoID = self._upload(self.license, videoPath, include_description)
-        self.insert_into_playlist(playlistID, videoID)
-
-
-class _12andProgressionsUploader(_12andUploader):
-    
-    def __init__(self):
-        super().__init__()
-        self.client_secrets_file = str(Path(CWD,"client_secret.json")) 
-        self.license = "youtube"
-        
-    def get_youtube(self):
-        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-        scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
-        api_service_name, api_version = "youtube", "v3"
-       
-        
-        return googleapiclient.discovery.build(
-            api_service_name, api_version,
-            credentials=google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-                self.client_secrets_file, scopes).run_console())
-        
-    def create_playlist(self, title: str):
-        request = self.get_youtube().playlists().insert(
-            part="snippet,status",
-            body={
-            "snippet": {
-                "title": title,
-                "description": "New progressions added regularly, subscribe for notifications!",
-                "tags": [
-                    "12&","twelve and","twelveand","12&Progressions",
-                    "12& Progressions","12 and progressions","12 andprogressions",
-                    "twelveandprogressions","twelve and progressions",
-                    "twelveand progressions","twelve andprogressions"],
-                "defaultLanguage": "en"},
-            "status": {"privacyStatus": "public"}})
-        print(request.execute())
+        dest = str(Path(self.videoPaths[0].parent,finalVideoName))
+        concatVideo.write_videofile(dest)
