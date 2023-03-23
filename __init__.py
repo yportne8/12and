@@ -243,7 +243,7 @@ class VideoEditor(threading.Thread):
         threading.Thread.__init__(self)
         
         destName        = pianorollPath.stem.split("_Pianoroll")[0]
-        self.dest       = Path(pianorollPath.parent,f"{destName}.mp4")
+        self.dest       = str(Path(pianorollPath.parent,f"{destName}.mp4"))
         self.visualizer = str(visualizerPath)
         self.pianoroll  = str(pianorollPath)
         
