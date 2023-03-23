@@ -44,7 +44,7 @@ def midi2piano_visualizer():
     
     threads = [AVP(f,color) for f in files]
     for th in threads:
-        th.start()
+       th.start()
 
     while list(set(threads))[0] != True:
         for i, th in enumerate(threads):
@@ -53,14 +53,19 @@ def midi2piano_visualizer():
                     th.join()
                     threads[i] = True
 
-    files = [f for f in files in f.suffix == ".mp4"]
-    threads = list()
+    files = GET_FILES([".midi",".mid"])
+    files = [Path(f.parent,f"{f.stem}_Pianoroll.mp4") for f in files]
+    files = [f for f in files if f.exists()]
     names = [f.stem.split("_Pianoroll")[0] for f in files if "_Pianoroll" in f.stem]
+    
+    threads = list()
     for name in names:
         if not "Visualizer" in name:
-            pianoroll = Path(files[0].parent, f"{name}Pianoroll.mp4")
-            visualizer = Path(files[0].parent, f"{name}Visualizer.mp4")
-            threads.append(VideoEditor(pianoroll,visualizer))
+            pianoroll = Path(files[0].parent, f"{name}_Pianoroll.mp4")
+            visualizer = Path(files[0].parent, f"{name}_Visualizer.mp4")
+            if visualizer.exists():
+                threads.append(VideoEditor(pianoroll,visualizer))
+    
     for th in threads:
         th.start()
 
