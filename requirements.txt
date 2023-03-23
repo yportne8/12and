@@ -1,0 +1,4 @@
+audio-visualizer-python==2.0.0
+moviepy==1.0.3
+musicpy==6.59
+pandas==1.5.3
