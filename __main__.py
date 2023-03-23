@@ -17,41 +17,41 @@ def midi2piano_visualizer():
     files = GET_FILES([".midi",".mid"])
     notes = False
 
-    threads = [MIDIVisualizer(f,notes,color) for f in files]
-    for th in threads:
-        th.start()
+    #threads = [MIDIVisualizer(f,notes,color) for f in files]
+    #for th in threads:
+    #    th.start()
 
-    while list(set(threads))[0] != True:
-        for i, th in enumerate(threads):
-            if type(th) != bool:
-                if not th.is_alive():
-                    th.join()
-                    threads[i] = True
+    #while list(set(threads))[0] != True:
+    #    for i, th in enumerate(threads):
+    #        if type(th) != bool:
+    #            if not th.is_alive():
+    #                th.join()
+    #                threads[i] = True
 
-    threads = [FluidSynth("studio",f) for f in files]
-    for th in threads:
-        th.start()
+    #threads = [FluidSynth("studio",f) for f in files]
+    #for th in threads:
+    #    th.start()
 
-    while list(set(threads))[0] != True:
-        for i, th in enumerate(threads):
-            if type(th) != bool:
-                if not th.is_alive():
-                    th.join()
-                    threads[i] = True
+    #while list(set(threads))[0] != True:
+    #    for i, th in enumerate(threads):
+    #        if type(th) != bool:
+    #            if not th.is_alive():
+    #                th.join()
+    #                threads[i] = True
 
-    files = [Path(f.parent,f"{f.stem}.wav") for f in files]
-    files = [f for f in files if f.exists()]
+    #files = [Path(f.parent,f"{f.stem}.wav") for f in files]
+    #files = [f for f in files if f.exists()]
     
-    threads = [AVP(f,color) for f in files]
-    for th in threads:
-       th.start()
+    #threads = [AVP(f,color) for f in files]
+    #for th in threads:
+    #   th.start()
 
-    while list(set(threads))[0] != True:
-        for i, th in enumerate(threads):
-            if type(th) != bool:
-                if not th.is_alive():
-                    th.join()
-                    threads[i] = True
+    #while list(set(threads))[0] != True:
+    #    for i, th in enumerate(threads):
+    #        if type(th) != bool:
+    #            if not th.is_alive():
+    #                th.join()
+    #                threads[i] = True
 
     files = GET_FILES([".midi",".mid"])
     files = [Path(f.parent,f"{f.stem}_Pianoroll.mp4") for f in files]

@@ -258,7 +258,7 @@ class VideoEditor(threading.Thread):
                 pianorollClip.set_position((0,0))],
                 size = (1920,1080))
 
-            combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4',threads=6)
+            combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4')
 
         except Exception as e:
             traceback.print_exception(e)
