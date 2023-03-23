@@ -10,48 +10,48 @@ from PySimpleGUI import (popup_yes_no,
 
 
 def midi2piano_visualizer():
-    #colors = {1:"blue",2:"green",3:"red",4:"purple",5:"grey"}
-    #print(colors)
-    #color = colors[int(input("Color?: "))]
+    colors = {1:"blue",2:"green",3:"red",4:"purple",5:"grey"}
+    print(colors)
+    color = colors[int(input("Color?: "))]
 
-    #files = GET_FILES([".midi",".mid"])
-    #notes = False
+    files = GET_FILES([".midi",".mid"])
+    notes = False
 
-    #threads = [MIDIVisualizer(f,notes,color) for f in files]
-    #for th in threads:
-    #    th.start()
+    threads = [MIDIVisualizer(f,notes,color) for f in files]
+    for th in threads:
+        th.start()
 
-    #while list(set(threads))[0] != True:
-    #    for i, th in enumerate(threads):
-    #        if type(th) != bool:
-    #            if not th.is_alive():
-    #                th.join()
-    #                threads[i] = True
+    while list(set(threads))[0] != True:
+        for i, th in enumerate(threads):
+            if type(th) != bool:
+                if not th.is_alive():
+                    th.join()
+                    threads[i] = True
 
-    #threads = [FluidSynth("studio",f) for f in files]
-    #for th in threads:
-    #    th.start()
+    threads = [FluidSynth("studio",f) for f in files]
+    for th in threads:
+        th.start()
 
-    #while list(set(threads))[0] != True:
-    #    for i, th in enumerate(threads):
-    #        if type(th) != bool:
-    #            if not th.is_alive():
-    #                th.join()
-    #                threads[i] = True
+    while list(set(threads))[0] != True:
+        for i, th in enumerate(threads):
+            if type(th) != bool:
+                if not th.is_alive():
+                    th.join()
+                    threads[i] = True
 
-    #files = [Path(f.parent,f"{f.stem}.wav") for f in files]
-    #files = [f for f in files if f.exists()]
+    files = [Path(f.parent,f"{f.stem}.wav") for f in files]
+    files = [f for f in files if f.exists()]
     
-    #threads = [AVP(f,color) for f in files]
-    #for th in threads:
-    #   th.start()
+    threads = [AVP(f,color) for f in files]
+    for th in threads:
+       th.start()
 
-    #while list(set(threads))[0] != True:
-    #    for i, th in enumerate(threads):
-    #        if type(th) != bool:
-    #            if not th.is_alive():
-    #                th.join()
-    #                threads[i] = True
+    while list(set(threads))[0] != True:
+        for i, th in enumerate(threads):
+            if type(th) != bool:
+                if not th.is_alive():
+                    th.join()
+                    threads[i] = True
 
     files = GET_FILES([".midi",".mid"]) # [TODO] remove
     names = [f.stem for f in files]    
