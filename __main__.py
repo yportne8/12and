@@ -10,12 +10,12 @@ from PySimpleGUI import (popup_yes_no,
 
 
 def midi2piano_visualizer():
-    colors = {1:"blue",2:"green",3:"red",4:"purple",5:"grey"}
-    print(colors)
-    color = colors[int(input("Color?: "))]
+    #colors = {1:"blue",2:"green",3:"red",4:"purple",5:"grey"}
+    #print(colors)
+    #color = colors[int(input("Color?: "))]
 
-    files = GET_FILES([".midi",".mid"])
-    notes = False
+    #files = GET_FILES([".midi",".mid"])
+    #notes = False
 
     #threads = [MIDIVisualizer(f,notes,color) for f in files]
     #for th in threads:
@@ -53,28 +53,31 @@ def midi2piano_visualizer():
     #                th.join()
     #                threads[i] = True
 
-    files = GET_FILES([".midi",".mid"])
-    files = [Path(f.parent,f"{f.stem}_Pianoroll.mp4") for f in files]
-    files = [f for f in files if f.exists()]
-    names = [f.stem.split("_Pianoroll")[0] for f in files if "_Pianoroll" in f.stem]
-    
+    files = GET_FILES([".midi",".mid"]) # [TODO] remove
+    names = [f.stem for f in files]    
     threads = list()
     for name in names:
         if not "Visualizer" in name:
             pianoroll = Path(files[0].parent, f"{name}_Pianoroll.mp4")
             visualizer = Path(files[0].parent, f"{name}_Visualizer.mp4")
-            if visualizer.exists():
+            if pianoroll.exists() and visualizer.exists():
                 threads.append(VideoEditor(pianoroll,visualizer))
+            else:
+                print(f"Failed to find videos for {name}.")
     
-    for th in threads:
-        th.start()
+    if not threads:
+        msg = f"Nothing to thread. Video Editing process requires a _Pianoroll and _Visualizer.mp4"
+        print(msg)
+    else: 
+        for th in threads:
+            th.start()
 
-    while list(set(threads))[0] != True:
-        for i, th in enumerate(threads):
-            if type(th) != bool:
-                if not th.is_alive():
-                    th.join()
-                    threads[i] = True
+        while list(set(threads))[0] != True:
+            for i, th in enumerate(threads):
+                if type(th) != bool:
+                    if not th.is_alive():
+                        th.join()
+                        threads[i] = True
     
 
 def midi2visualizer():
