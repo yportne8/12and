@@ -38,11 +38,10 @@ def midi2piano_visualizer():
                 if not th.is_alive():
                     th.join()
                     threads[i] = True
-
-    files = [Path(f.parent,f"{f.stem}.wav") for f in files]
-    files = [f for f in files if f.exists()]
+    wavfiles = [Path(f.parent,f"{f.stem}.wav") for f in files]
+    wavfiles = [f for f in files if f.exists()]
     
-    threads = [AVP(f,color) for f in files]
+    threads = [AVP(f,color) for f in wavfiles]
     for th in threads:
        th.start()
 
@@ -53,20 +52,29 @@ def midi2piano_visualizer():
                     th.join()
                     threads[i] = True
 
-    names = [f.stem for f in files]    
     threads = list()
-    for name in names:
-        if not "Visualizer" in name:
-            pianoroll = Path(files[0].parent, f"{name}_Pianoroll.mp4")
-            visualizer = Path(files[0].parent, f"{name}_Visualizer.mp4")
-            if pianoroll.exists() and visualizer.exists():
-                threads.append(VideoEditor(pianoroll,visualizer))
-            else:
-                print(f"Failed to find videos for {name}.")
+    for midiPath in files:
+        
+        name = f"{midiPath.stem}_Pianoroll.mp4"
+        pianoroll = Path(midiPath.parent, name)
+        try:
+            assert pianoroll.exists()
+        except:
+            print(f"Pianoroll does not exist for {name}")
+            next
+        
+        name = f"{midiPath.stem}_Visualizer.mp4"
+        visualizer = Path(midiPath.parent, name)
+        try:
+            assert visualizer.exists()
+        except:
+            print(f"Visualizer does not exist for {name}")
+            next
+
+        threads.append(VideoEditor(pianoroll,visualizer))
     
     if not threads:
-        msg = f"Nothing to thread. Video Editing process requires a _Pianoroll and _Visualizer.mp4"
-        print(msg)
+        print(f"Nothing to thread. Please check the file paths.")
     else: 
         for th in threads:
             th.start()
