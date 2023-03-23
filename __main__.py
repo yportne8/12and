@@ -53,7 +53,6 @@ def midi2piano_visualizer():
                     th.join()
                     threads[i] = True
 
-    files = GET_FILES([".midi",".mid"]) # [TODO] remove
     names = [f.stem for f in files]    
     threads = list()
     for name in names:

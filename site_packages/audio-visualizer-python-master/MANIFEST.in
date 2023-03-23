@@ -1,0 +1,8 @@
+include src/tests/*
+include src/tests/data/*
+include src/components/*.ui
+include src/gui/*.ui
+include src/gui/background.png
+include src/encoder-options.json
+global-exclude src/components/__template__.ui
+global-exclude *.py[cod]
