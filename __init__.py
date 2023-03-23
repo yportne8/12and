@@ -321,7 +321,7 @@ class ChapterGenerator(threading.Thread):
     def run(self):
         try:
             clips = [VideoFileClip(str(v)) for v in self.videoPaths]
-        
+            random.shuffle(clips) # so that they are not in alpha order
         except:
             msg = "One or more video files could not be processed."
             print(msg)
