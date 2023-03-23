@@ -19,7 +19,6 @@ from time import sleep
 from typing import Union
 from string import ascii_letters
 
-from ffmpeg import FFmpeg
 from moviepy.editor import (vfx,
     concatenate_videoclips,VideoFileClip,
     AudioFileClip,TextClip,CompositeVideoClip)
