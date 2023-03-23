@@ -39,7 +39,9 @@ def midi2piano_visualizer():
                     th.join()
                     threads[i] = True
 
-    files = [f for f in files in f.suffix == ".wav"]
+    files = [Path(f.parent,f"{f.stem}.wav") for f in files]
+    files = [f for f in files if f.exists()]
+    
     threads = [AVP(f,color) for f in files]
     for th in threads:
         th.start()
@@ -54,7 +56,6 @@ def midi2piano_visualizer():
     files = [f for f in files in f.suffix == ".mp4"]
     threads = list()
     names = [f.stem.split("_Pianoroll")[0] for f in files if "_Pianoroll" in f.stem]
-    names = [f.stem.split("Pianoroll")[0] for f in files if "Pianoroll" in f.stem]
     for name in names:
         if not "Visualizer" in name:
             pianoroll = Path(files[0].parent, f"{name}Pianoroll.mp4")
@@ -88,7 +89,9 @@ def midi2visualizer():
                     th.join()
                     threads[i] = True
 
-    files = [f for f in files in f.suffix == ".wav"]
+    files = [Path(f.parent,f"{f.stem}.wav") for f in files]
+    files = [f for f in files if f.exists()]
+
     threads = [AVP(f,color) for f in files]
     for th in threads:
         th.start()

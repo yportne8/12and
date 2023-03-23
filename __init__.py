@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-background
 
 import sys
-import random
-
 from pathlib import Path
 if getattr(sys, 'frozen', False):
     CWD = sys._MEIPASS
@@ -14,6 +12,7 @@ import os
 import shutil
 import random
 import atexit
+import traceback
 import threading
 import subprocess
 from time import sleep
@@ -55,16 +54,22 @@ class Composer:
         
         progressions = list()
         repeat = 2 if all_keys else 1
+        
         for tone in _12keys:
+
             for quality in ["major", "minor"]:
                 keysig = f"{tone} {quality}"
+
                 c1 = S(keysig).chord_progression(progression.split("-"),1/6,1/6)
                 c2 = S(keysig).chord_progression(progression.split("-"),1/4,1/4)
                                    
                 chord_progression = c1*2 | rest(0.5) | c1[::-1]*2 | rest(0.5) | c2*2 | rest(0.5) | c2[::-1]*2
+
                 keysigMidi = Path(playlistFolder, f"{progression} Progression in {tone} {quality}.midi")
                 write(chord_progression, bpm=bpm, name=keysigMidi)
+
                 progressions.append(c1 | rest(0.5))
+
         fullMidi = Path(playlistFolder, f"{progression} Progression in All Key Signatures).midi")
         write(progressions, fullMidi)
 
@@ -77,10 +82,13 @@ class AudioDubber:
         self.videoPath = str(videoPath) 
 
     def dub(self):
-        video  = VideoFileClip(self.videoPath)
-        audio  = AudioFileClip(self.audioPath)
-        dubbed = video.set_audio(audio)
-        dubbed.write_videofile(self.dest)
+        try:
+            video  = VideoFileClip(self.videoPath)
+            audio  = AudioFileClip(self.audioPath)
+            dubbed = video.set_audio(audio)
+            dubbed.write_videofile(self.dest)
+        except Exception as e:
+            traceback.print_exception(e)
 
 
 class MIDIVisualizer(threading.Thread):
@@ -112,10 +120,12 @@ class MIDIVisualizer(threading.Thread):
         
         showScore  = 1 if notes else 0
         showNotes  = 1 if notes else 0
+        
         if peddle:
             showPeddle = 1
             self.height = "1080"
             self.width = "1920"
+        
         else:
             showPeddle = 0
             self.height = "1080"
@@ -126,6 +136,7 @@ class MIDIVisualizer(threading.Thread):
             contents = f.read()
             contents = contents % (showScore,showNotes,showPeddle,self.background)
             config = Path(config.parent, f"_{config.stem}.ini")
+        
             with open(config, "w+") as f:
                 f.write(contents)
 
@@ -134,11 +145,16 @@ class MIDIVisualizer(threading.Thread):
     def run(self):
         params  = f' --export "{self.dest}" --format MPEG4 --config "{self.config}"'
         params += f' --midi "{self.midiPath}" --size {self.width} {self.height}'
-        p = subprocess.Popen(
-            self.app+params,shell=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE)
-        self.stdout, self.stderr = p.communicate()
+        
+        try:
+            p = subprocess.Popen(
+                self.app+params,shell=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            self.stdout, self.stderr = p.communicate()
+        
+        except Exception as e:
+            trackback.print_exception(e)
 
 
 class FluidSynth(threading.Thread):
@@ -171,11 +187,16 @@ class FluidSynth(threading.Thread):
         params  = f' -ni -g {self.gain} "{self.soundfont}"'
         params += f' "{self.midiPath}" -F "{self.dest}"'
         params += f' -r {self.sample_rate}'
-        p = subprocess.Popen(self.app+params,
-                             shell=False,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        self.stdout, self.stderr = p.communicate()
+        
+        try:
+            p = subprocess.Popen(self.app+params,
+                                shell=False,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+            self.stdout, self.stderr = p.communicate()
+        
+        except Exception as e:
+            traceback.print_exception(e)
 
 
 class AVP(threading.Thread):
@@ -201,11 +222,16 @@ class AVP(threading.Thread):
         params  = f' -c 0 image path="{self.background}"'
         params += ' -c 1 classic color=255,255,255'
         params += f' -i "{self.audioPath}" -o "{self.dest}"'
-        p = subprocess.Popen(self.app+params,
-                             shell=False,
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        self.stdout, self.stderr = p.communicate()
+        
+        try:
+            p = subprocess.Popen(self.app+params,
+                                shell=False,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+            self.stdout, self.stderr = p.communicate()
+        
+        except Exception as e:
+            traceback.print_exception(e)
         
 
 class VideoEditor(threading.Thread):
@@ -222,16 +248,20 @@ class VideoEditor(threading.Thread):
         self.pianoroll  = str(pianorollPath)
         
     def run(self):
-        visualizerClip = VideoFileClip(self.visualizer).resize((1920,1080))
-        pianorollClip  = VideoFileClip(self.pianoroll).resize((1920,1080))
-        pianorollClip  = crop(pianorollClip, y1=1080//2)
-        
-        combinedVideo = CompositeVideoClip([
-            visualizerClip.volumex(1.0),
-            pianorollClip.set_position((0,0))],
-            size = (1920,1080))
+        try:
+            visualizerClip = VideoFileClip(self.visualizer).resize((1920,1080))
+            pianorollClip  = VideoFileClip(self.pianoroll).resize((1920,1080))
+            pianorollClip  = crop(pianorollClip, y1=1080//2)
+            
+            combinedVideo = CompositeVideoClip([
+                visualizerClip.volumex(1.0),
+                pianorollClip.set_position((0,0))],
+                size = (1920,1080))
 
-        combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4',threads=6)
+            combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4',threads=6)
+
+        except Exception as e:
+            traceback.print_exception(e)
 
 
 class ChapterGenerator(threading.Thread):
@@ -252,30 +282,60 @@ class ChapterGenerator(threading.Thread):
         totalDuration = 0
         
         for video in self.videoPaths:
-            title = video.stem
-            clip = VideoFileClip(str(video))
-            duration = clip.duration
+            try:
+                clip = VideoFileClip(str(video))
+                duration = clip.duration
             
+            except Exception as e:
+                trackback.print_exception(e)
+                msg = f"Please remove {video.name} from the source folder and try again."
+                print(msg)
+                return
+            
+            title = video.stem
             timestamp = "{:02d}:{:02d}:{:02d}".format(int(total_duration // 3600),
                             int(total_duration % 3600 // 60),
                             int(total_duration % 60))
+
             ts_components = timestamp.split(":")
             if int(ts_components[0]) == 0:
                 ts_components = ts_components[1:]
                 if int(ts_components[0]) < 10:
                     ts_components[0] = str(int(ts_components))
+            
             timestamp = ":".join(ts_components)
             chapterListing += "{} - {}\n".format(timestamp, title)
+            
             totalDuration += duration
         
         dest = Path(self.videoPaths[0].parent, "chapterListing.txt")
-        with open(dest, "w+") as cl:
-            cl.write(chapterListing)
+        
+        try:
+            with open(dest, "w+") as listing:
+                listing.write(chapterListing)
+        
+        except Exception as e:
+            trackback.print_exception(e)
+            print("Failed to write Chapter Listing...")
     
     def run(self):
-        clips = [VideoFileClip(str(v)) for v in self.videoPaths]
+        try:
+            clips = [VideoFileClip(str(v)) for v in self.videoPaths]
+        
+        except:
+            msg = "One or more video files could not be processed."
+            print(msg)
+            return
+        
         concatVideo = concatenate_videoclips(clips)
         
+        # [NOTE] AVP writes a temporary mp3 file for audio
+        # during the video write process. If multiple AVP
+        # processes are running at the same time, mulitple
+        # processes may try to read/write from the same 
+        # file given the same file name. Below is a work
+        # around to generate a semi-random filename for
+        # the final concatenated video for each process.
         finalVideoName = list("ByPassAudioWriteBug")
         random.shuffle(finalVideoName)
         finalVideoName = f'{"".join(finalVideoName)}.mp4'        
