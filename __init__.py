@@ -8,6 +8,7 @@ else:
     CWD = Path(__file__).parent
 sys.path.append(str(Path(CWD,"bin")))
 
+
 import os
 import shutil
 import random
@@ -19,11 +20,18 @@ from time import sleep
 from typing import Union
 from string import ascii_letters
 
-from moviepy.editor import (vfx,
+import cv2
+from vidgear.gears import CamGear
+from vidgear.gears import WriteGear
+from googleapiclient.discovery import build
+
+from moviepy.editor import (
     concatenate_videoclips,VideoFileClip,
-    AudioFileClip,TextClip,CompositeVideoClip)
-from moviepy.video.fx.all import crop, mask_color
-from PySimpleGUI import popup_get_folder, popup_yes_no, popup_get_text
+    AudioFileClip,CompositeVideoClip)
+
+from PySimpleGUI import (
+    popup_get_folder,popup_yes_no,
+    popup_get_text)
 
 
 
@@ -46,37 +54,145 @@ def GET_FILES(suffix):
     return [_FIX_WINDOWS_PATH(p) for p in paths if p.suffix in suffix]
 
 
+class Streamer:
+    
+    def __init__(self, channelID: str="UC-RnLMNepBTHFitAfxltcBw"):
+        self.channelID = channelID
+        self.font = cv2.FONT_HERSHEY_COMPLEX_SMALL
+        self.streamkey = popup_get_text("Stream Key?: ").strip()
+        
+        api_key = popup_get_text("Api Key?: ").strip()
+        try:
+            self.youtube = build('youtube','v3',developerKey=api_key)
+            self.api_key = api_key
+        
+        except Exception as e:
+            print("Api access failed.", end=str(e))
+            self.api_key = None
+
+    def __get_channel_playlists(self):
+        playlists = []
+        request = self.youtube.playlists().list(part='snippet', channelId=self.channelID, maxResults=50)
+        response = request.execute()
+        for item in response['items']:
+            title = item['snippet']['title']
+            playlist_id = item['id']
+            playlists.append((title, playlist_id))
+        return playlists
+
+    def __get_playlist_videos(self, playlistID: str):
+        videos = []
+        request = self.youtube.playlistItems().list(part='snippet', playlistId=playlistID, maxResults=50)
+        response = request.execute()
+        for item in response['items']:
+            title = item['snippet']['title']
+            video_id = item['snippet']['resourceId']['videoId']
+            videos.append((title, video_id))
+        return videos
+
+    def __write_title(self, frame, title):
+        return cv2.putText(
+            frame, title, (260,850), 
+            self.font, 0.2, "white", 2, 
+            cv2.LINE_AA, False)
+    
+    def __write_composer(self, frame, composer):
+        return cv2.putText(
+            frame, composer, (275,965), 
+            self.font, 1.5, "white", 2, 
+            cv2.LINE_AA, False)
+        
+    def _show_frame(self, frame, writer, composer, title):
+        cv2.imshow(writer,
+            self.__write_title(
+                self.__write_composer(frame,composer),title))
+
+    def _get_stream(vid: str, streamKey: str):
+        stream = CamGear(
+        source=f"https://youtu.be/{vid}",
+        stream_mode=True,logging=True).start()
+        
+        writer = WriteGear(
+            output_filename="rtmp://a.rtmp.youtube.com/live2/{}".format(streamKey),
+            logging=True,
+            **{"-acodec": "aac",
+            "-ar": 44100,
+            "-b:a": 712000,
+            "-vcodec": "libx264",
+            "-preset": "medium",
+            "-b:v": "4500k",
+            "-bufsize": "512k",
+            "-pix_fmt": "yuv420p",
+            "-f": "flv",})
+        return (stream,writer)
+
+    def get_composers(self):
+        return self.__get_channel_playlists()
+
+
+    def get_videos(self, composer: tuple):
+        return self.__get_playlist_videos(composer[1])
+
+    def stream(self):
+        print(f"\rInitializing Infinite Stream...", end="")
+        sleep(2)
+        composers = self.get_composers()
+        while True:
+            random.shuffle(composers)
+            playlistName = composers[0]
+            playlistID = composers[1]
+            string2find = "Selected Works by"
+            if string2find in playlistName:
+                videos = self.get_videos(playlistID)
+                random.shuffle(videos)
+                
+                video = videos[0]
+                title = video[0]
+                vid = video[1]
+                
+                composer = playlistName.split("Selected Works by")[-1].strip().title()
+                stream, writer = self._get_stream(vid,streamkey)
+                
+                while True:                
+                    frame = stream.read()   
+                    if not frame:
+                        break
+
+                    self._show_frame(frame,writer,composer,song[0])
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord("q"):
+                        break
+            
+                stream.stop()
+                writer.close()
+
+
 class Composer:
-
-    def progression_midi(self, progression: str, bpm: int=120, all_keys: bool=False):
-        _12keys = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"]
+    
+    
+    def __init__(self):
+        tones = ['C','D','E','F','G','A','B']
+        semitones = ["C#","Eb","F#","Ab","Bb"]
+    
+    def chord_progression(self, progression, key: str, quality: str, interval: str):
+        duration = interval
+        scale = S(f"{key} {quality}")
         
-        progressions = list()
-        repeat = 2 if all_keys else 1
-        
-        for tone in _12keys:
+        if type(progression) == str: progression = progression.split("-")
+        return scale.chord_progression(progression,duration,interval)
 
-            for quality in ["major", "minor"]:
-                keysig = f"{tone} {quality}"
-
-                c1 = S(keysig).chord_progression(progression.split("-"),1/6,1/6)
-                c2 = S(keysig).chord_progression(progression.split("-"),1/4,1/4)
-                                   
-                chord_progression = c1*2 | rest(0.5) | c1[::-1]*2 | rest(0.5) | c2*2 | rest(0.5) | c2[::-1]*2
-
-                keysigMidi = Path(playlistFolder, f"{progression} Progression in {tone} {quality}.midi")
-                write(chord_progression, bpm=bpm, name=keysigMidi)
-
-                progressions.append(c1 | rest(0.5))
-
-        fullMidi = Path(playlistFolder, f"{progression} Progression in All Key Signatures).midi")
-        write(progressions, fullMidi)
+    def broken_chord_progression(self, progression, key: str, quality: str, interval: str):
+        progression = self.chord_progression(progression, key, quality, interval)
+        for chord in progression:
+            notes = chord.notes
+            chord.notes = notes[0] | notes[2] |notes[1] | notes[2]  
+        return progression 
 
 
 class AudioDubber:
 
     def __init__(self, audioPath: Path, videoPath: Path):
-        self.dest      = str(Path(videoPath.parent,f"{videoPath.stem}_dubbed.mp4"))
+        self.dest      = str(Path(audioPath.parent,f"{audioPath.stem}.mp4"))
         self.audioPath = str(audioPath)
         self.videoPath = str(videoPath) 
 
@@ -86,8 +202,9 @@ class AudioDubber:
             audio  = AudioFileClip(self.audioPath)
             dubbed = video.set_audio(audio)
             dubbed.write_videofile(self.dest)
+        
         except Exception as e:
-            traceback.print_exception(e)
+            print(str(e))
 
 
 class MIDIVisualizer(threading.Thread):
@@ -103,12 +220,9 @@ class MIDIVisualizer(threading.Thread):
                  app         : Path = APP,
                  config      : Path = CONFIG,
                  backgrounds : dict = BACKGROUNDS):
-        self.stdout = None
-        self.stderr = None
         threading.Thread.__init__(self)
         
-        destName = f"{midiPath.stem}.mp4" if notes \
-                    else f"{midiPath.stem}_Pianoroll.mp4" 
+        destName = f"{midiPath.stem}_Pianoroll.mp4" 
         
         self.app        = str(app)
         self.dest       = str(Path(midiPath.parent,destName))
@@ -146,14 +260,10 @@ class MIDIVisualizer(threading.Thread):
         params += f' --midi "{self.midiPath}" --size {self.width} {self.height}'
         
         try:
-            p = subprocess.Popen(
-                self.app+params,shell=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            self.stdout, self.stderr = p.communicate()
+            output = subprocess.check_output(self.app+params,shell=False)
         
         except Exception as e:
-            trackback.print_exception(e)
+            print(output,end=str(e))
 
 
 class FluidSynth(threading.Thread):
@@ -168,8 +278,6 @@ class FluidSynth(threading.Thread):
                  app         : Path = FSYNTH,
                  soundfonts  : dict = SOUNDFONTS,
                  sample_rate : str  = SAMPLE_RATE):
-        self.stdout = None
-        self.stderr = None
         threading.Thread.__init__(self)
         
         self.app         = str(app)
@@ -188,14 +296,11 @@ class FluidSynth(threading.Thread):
         params += f' -r {self.sample_rate}'
         
         try:
-            p = subprocess.Popen(self.app+params,
-                                shell=False,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-            self.stdout, self.stderr = p.communicate()
+            p = subprocess.check_output(self.app+params,shell=False)
+            print(p)
         
         except Exception as e:
-            traceback.print_exception(e)
+            print(str(e))
 
 
 class AVP(threading.Thread):
@@ -205,40 +310,33 @@ class AVP(threading.Thread):
 
     def __init__(self, audioPath: Path, color: str,
                  backgrounds=BACKGROUNDS):
-        self.stdout = None
-        self.stderr = None
         threading.Thread.__init__(self)
-
-        self.app        = "avp"
-        self.dest       = str(Path(audioPath.parent,f"{audioPath.stem}_Visualizer.mp4"))
-        self.audioPath  = str(audioPath)
         
+        dest = Path(audioPath.parent,f"{audioPath.stem}_Visualizer.mp4")
+        self.dest = str(dest)
+
         background = [bg for bg in backgrounds if bg.stem == color][0] 
         self.background = str(background)
-        
+        if audioPath.suffix != ".wav":
+            audioPath = Path(audioPath.parent,f"{audioPath.stem}.wav")
+        self.audioPath = str(audioPath)
     
     def run(self):
-        params  = f' -c 0 image path="{self.background}"'
-        params += ' -c 1 classic color=255,255,255'
-        params += f' -i "{self.audioPath}" -o "{self.dest}"'
+        cmd = f'avp -c 0 image path="{self.background}"'
+        cmd += f' -c 1 classic color=255,255,255 -i "{self.audioPath}"'
+        cmd += f' -o "{self.dest}"'
         
         try:
-            p = subprocess.Popen(self.app+params,
-                                shell=False,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-            self.stdout, self.stderr = p.communicate()
+            p = subprocess.check_output(cmd,shell  = False)
         
         except Exception as e:
-            traceback.print_exception(e)
+            print(str(e))
         
 
 class VideoEditor(threading.Thread):
 
 
     def __init__(self, pianorollPath: Path, visualizerPath: Path):
-        self.stdout = None
-        self.stderr = None
         threading.Thread.__init__(self)
         
         destName        = pianorollPath.stem.split("_Pianoroll")[0]
@@ -250,27 +348,25 @@ class VideoEditor(threading.Thread):
         try:
             visualizerClip = VideoFileClip(self.visualizer).resize((1920,1080))
             pianorollClip  = VideoFileClip(self.pianoroll).resize((1920,1080))
+            duration = pianorollClip.duration
+            actualDuration = duration - 5
+            pianorollClip = pianorollClip.subclip(0,actualDuration)
             pianorollClip  = crop(pianorollClip, y1=1080//2)
-            
+
             combinedVideo = CompositeVideoClip([
                 visualizerClip.volumex(1.0),
                 pianorollClip.set_position((0,0))],
                 size = (1920,1080))
-
             combinedVideo.write_videofile(self.dest,fps=60,codec='mpeg4')
 
         except Exception as e:
-            traceback.print_exception(e)
+            print(str(e))
 
 
-class ChapterGenerator(threading.Thread):
+class ChapterGenerator:
 
 
     def __init__(self, videoDir: Path):
-        self.stdout = None
-        self.stderr = None
-        threading.Thread.__init__(self)
-
         self.videoPaths = [
             Path(videoDir,f) for f in os.listdir(videoDir) \
                 if Path(videoDir,f).suffix == ".mp4"]
@@ -292,15 +388,16 @@ class ChapterGenerator(threading.Thread):
                 return
             
             title = video.stem
-            timestamp = "{:02d}:{:02d}:{:02d}".format(int(total_duration // 3600),
-                            int(total_duration % 3600 // 60),
-                            int(total_duration % 60))
+            timestamp = "{:02d}:{:02d}:{:02d}".format(int(totalDuration // 3600),
+                            int(totalDuration % 3600 // 60),
+                            int(totalDuration % 60))
 
             ts_components = timestamp.split(":")
             if int(ts_components[0]) == 0:
                 ts_components = ts_components[1:]
-                if int(ts_components[0]) < 10:
-                    ts_components[0] = str(int(ts_components))
+                
+            if int(ts_components[0]) < 10:
+                ts_components[0] = ts_components[0][1:]
             
             timestamp = ":".join(ts_components)
             chapterListing += "{} - {}\n".format(timestamp, title)
@@ -317,27 +414,22 @@ class ChapterGenerator(threading.Thread):
             trackback.print_exception(e)
             print("Failed to write Chapter Listing...")
     
-    def run(self):
-        try:
-            clips = [VideoFileClip(str(v)) for v in self.videoPaths]
-            random.shuffle(clips) # so that they are not in alpha order
-        except:
-            msg = "One or more video files could not be processed."
-            print(msg)
-            return
+    def generate(self):
+        clips = [VideoFileClip(str(v)) for v in self.videoPaths]
+       
+        trim = int(popup_get_text("Trim?: ").strip())
+        if trim > 0:
+            clips = [c.subclip(0,c.duration-trim) for c in clips]
+
+        duration = sum([c.duration for c in clips])
+        mins = duration // 60
+        if popup_yes_no(f"Generate {mins} minute video?") == "Yes":
+            self.__create_chapter_listing()
+            concatVideo = concatenate_videoclips(clips)
         
-        concatVideo = concatenate_videoclips(clips)
-        
-        # [NOTE] AVP writes a temporary mp3 file for audio
-        # during the video write process. If multiple AVP
-        # processes are running at the same time, mulitple
-        # processes may try to read/write from the same 
-        # file given the same file name. Below is a work
-        # around to generate a semi-random filename for
-        # the final concatenated video for each process.
-        finalVideoName = list("ByPassAudioWriteBug")
-        random.shuffle(finalVideoName)
-        finalVideoName = f'{"".join(finalVideoName)}.mp4'        
-        
-        dest = str(Path(self.videoPaths[0].parent,finalVideoName))
-        concatVideo.write_videofile(dest)
+            finalVideoName = list("ByPassAudioWriteBug")
+            random.shuffle(finalVideoName)
+            finalVideoName = f'{"".join(finalVideoName)}.mp4'        
+            
+            dest = str(Path(self.videoPaths[0].parent,finalVideoName))
+            concatVideo.write_videofile(dest)
